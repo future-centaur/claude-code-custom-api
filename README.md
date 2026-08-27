@@ -136,6 +136,44 @@ no request or response content ever touches disk. This was chosen over the
 simpler `CLAUDE_CODE_SIMPLE=1` fix specifically to keep CLAUDE.md
 auto-loading, hooks, and auto-memory working normally.
 
+### Bug 4 — undocumented env vars broke model discovery (found after initial write-up)
+
+`ox.ps1` originally also set `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`,
+`DISABLE_COMPACT=1`, and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. These 
+were never validated the way Bugs 1-3 were and turned out to cause a fourth,
+separate failure: `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` makes Claude
+Code call a model-discovery endpoint against `ANTHROPIC_BASE_URL` *before*
+the actual message request, expecting an Anthropic-shaped model list. The
+proxy forwards that straight to OpenRouter's own `/api/v1/models`, which
+returns OpenRouter's own JSON schema (an array of `{id, pricing,
+context_length, ...}`), not an Anthropic-shaped response — producing
+"API returned an empty or malformed response (HTTP 200)" and "0 stream
+events received" on the very first call. **Fix:** all three lines were
+removed from `ox.ps1` and from `setup.ps1`'s generated template.
+
+### Not a bug — "model may not exist" can mean the model was actually retired
+
+If you get *"There's an issue with the selected model... it may not exist
+or you may not have access to it"* and Bugs 1-4 are all confirmed fixed
+(check `ox.ps1` doesn't have the Bug 4 lines and none of the Bug 1/2 vars
+are overridden elsewhere), **check whether OpenRouter simply pulled the
+model.** `stealth/ox-alpha` is a cloaked testing slug; OpenRouter retires
+these on a schedule ("Stealth Ox Alpha testing period... this model will be
+revealed today"). Confirm by calling OpenRouter directly, bypassing Claude
+Code entirely:
+
+```powershell
+$k = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY','User')
+Invoke-RestMethod -Uri 'https://openrouter.ai/api/v1/chat/completions' -Method Post `
+  -Headers @{ Authorization = "Bearer $k"; 'Content-Type' = 'application/json' } `
+  -Body (@{ model = 'stealth/ox-alpha'; messages = @(@{role='user'; content='hi'}) } | ConvertTo-Json)
+```
+
+A 404 with a message like `"...testing period...revealed today"` (rather
+than a generic "model not found") confirms it's a retirement, not a config
+issue. Fix: find the model's new/real name and re-run `setup.ps1 -Model
+"<new-name>"` — everything else in this setup is model-agnostic.
+
 ## Files in this folder
 
 | File | Purpose |
@@ -149,10 +187,12 @@ auto-loading, hooks, and auto-memory working normally.
 ## Troubleshooting
 
 - **`[claude-code:unrecognized_model]` or "There's an issue with the selected
-  model"** — this is the generic error for all three bugs above. If you hit
-  it after using `setup.ps1` as-is, something *else* changed; check that
-  none of the three env vars in Bug 1/2 are being overridden elsewhere
-  (another launcher, a global `.env`, a shell profile).
+  model"** — this is the generic error for all four bugs above, *and* for
+  plain model retirement (see "Not a bug" above). If you hit it after using
+  `setup.ps1` as-is, check in this order: (1) none of the Bug 1/2 env vars
+  are being overridden elsewhere (another launcher, a global `.env`, a shell
+  profile); (2) `ox.ps1` doesn't have the three Bug 4 lines back in it;
+  (3) the model still exists on OpenRouter at all.
 - **`ox` not found in a new terminal** — PATH changes only apply to
   terminals opened *after* `setup.ps1` ran. Close and reopen.
 - **"Node.js is required" error from `setup.ps1`** — install Node.js first;
