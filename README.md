@@ -109,7 +109,7 @@ auto-loading, hooks, and auto-memory working normally.
 ### Bug 4 — undocumented env vars broke model discovery (found after initial write-up)
 
 `ox.ps1` originally also set `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`,
-`DISABLE_COMPACT=1`, and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. These
+`DISABLE_COMPACT=1`, and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. These 
 were never validated the way Bugs 1-3 were and turned out to cause a fourth,
 separate failure: `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` makes Claude
 Code call a model-discovery endpoint against `ANTHROPIC_BASE_URL` *before*
