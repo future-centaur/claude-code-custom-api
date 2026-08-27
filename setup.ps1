@@ -9,7 +9,7 @@
   does is: (1) resolve and store your OpenRouter API key as a user
   environment variable, (2) write the chosen model to ox-model.txt, which
   ox.ps1 reads fresh on every launch, and (3) add this folder to your user
-  PATH.
+  PATH. 
 
   Because the model lives in ox-model.txt instead of being baked into a
   generated ox.ps1, switching models is just: .\setup.ps1 -Model "id"
