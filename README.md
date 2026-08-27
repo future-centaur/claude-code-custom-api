@@ -21,6 +21,36 @@ That's it. Everything below is *why* the launcher is shaped the way it is —
 read it before changing anything, because each piece works around a specific,
 non-obvious failure that has no error message pointing at its real cause.
 
+### Setting your API key
+
+The proxy reads your OpenRouter key from an environment variable — it's never hardcoded in ox_proxy.js, so it can't accidentally end up in a commit. 
+
+Option 1: Temporary (current terminal window only)
+powershell
+$env:OPENROUTER_API_KEY = "sk-or-v1-xxxxxxxxxxxx"
+
+Run this before launching ox.ps1. It only lasts until you close the terminal.
+
+Option 2: Permanent (persists across reboots)
+powershell
+setx OPENROUTER_API_KEY "sk-or-v1-xxxxxxxxxxxx"
+
+Close and reopen your terminal after running this — setx doesn't apply to the terminal you ran it in, only new ones.
+
+Option 3: GUI
+
+Windows key → search "Environment Variables" → "Edit environment variables for your account" → New → Name: OPENROUTER_API_KEY, Value: your key → OK. Same restart-terminal requirement applies.
+
+Verifying it worked
+powershell
+echo $env:OPENROUTER_API_KEY
+
+Should print your key back. If it prints nothing, either it didn't save or you're still in the terminal session from before you set it.
+
+⚠️ Don't commit your key
+
+If you'd rather keep the key inside a script for convenience instead of setting it system-wide, put it in a separate file (e.g. local.env) and add that file to .gitignore — never paste a real key directly into ox.ps1 or setup.ps1 if those files are tracked by git.
+
 ## What `setup.ps1` does
 
 1. Stores your key as the user environment variable `OPENROUTER_API_KEY`
