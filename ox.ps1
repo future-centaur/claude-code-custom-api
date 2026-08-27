@@ -1,16 +1,28 @@
 $ErrorActionPreference = 'Stop'
 
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
 $apiKey = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY', 'User')
 if (-not $apiKey) {
     $apiKey = $env:OPENROUTER_API_KEY
 }
 if (-not $apiKey) {
-    Write-Error "OPENROUTER_API_KEY is not set. Set it and try again."
+    Write-Error "OPENROUTER_API_KEY is not set. Run setup.ps1 or set it yourself and try again."
     exit 1
 }
 $apiKey = $apiKey.Trim()
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$modelFile = Join-Path $scriptDir 'ox-model.txt'
+if (-not (Test-Path $modelFile)) {
+    Write-Error "No model configured (ox-model.txt not found next to ox.ps1). Run setup.ps1 first."
+    exit 1
+}
+$Model = (Get-Content $modelFile -Raw).Trim()
+if (-not $Model) {
+    Write-Error "ox-model.txt is empty. Run .\setup.ps1 -Model <id> to set one."
+    exit 1
+}
+
 $proxyScript = Join-Path $scriptDir 'ox_proxy.js'
 $proxyOutFile = [System.IO.Path]::GetTempFileName()
 
@@ -35,15 +47,17 @@ try {
         $env:ANTHROPIC_BASE_URL = "http://127.0.0.1:$port"
     }
 
+    Write-Output "ox: using model $Model"
+
     $env:ANTHROPIC_AUTH_TOKEN = $apiKey
     $env:ANTHROPIC_API_KEY = ''
-    $env:ANTHROPIC_MODEL = 'z-ai/glm-5.2:free'
-    $env:ANTHROPIC_CUSTOM_MODEL_OPTION = 'z-ai/glm-5.2:free'
-    $env:ANTHROPIC_DEFAULT_OPUS_MODEL = 'z-ai/glm-5.2:free'
-    $env:ANTHROPIC_DEFAULT_SONNET_MODEL = 'z-ai/glm-5.2:free'
-    $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = 'z-ai/glm-5.2:free'
-    $env:ANTHROPIC_SMALL_FAST_MODEL = 'z-ai/glm-5.2:free'
-    $env:CLAUDE_CODE_SUBAGENT_MODEL = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_MODEL = $Model
+    $env:ANTHROPIC_CUSTOM_MODEL_OPTION = $Model
+    $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $Model
+    $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $Model
+    $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $Model
+    $env:ANTHROPIC_SMALL_FAST_MODEL = $Model
+    $env:CLAUDE_CODE_SUBAGENT_MODEL = $Model
 
     claude @args
     exit $LASTEXITCODE

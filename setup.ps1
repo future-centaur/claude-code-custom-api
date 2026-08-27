@@ -1,38 +1,54 @@
 <#
 .SYNOPSIS
-  Sets up `ox` — a command that launches Claude Code against an OpenRouter
-  model, without touching the normal `claude` command.
+  One-time setup for `ox` — configures your OpenRouter API key and model,
+  then adds this folder to your PATH so `ox` launches Claude Code through it.
 
 .DESCRIPTION
-  Self-contained: does not depend on any other file existing. Run it once
-  with your OpenRouter API key; it writes everything under $HOME\ox and
-  adds that folder to your user PATH.
+  This script does NOT generate ox.ps1, ox.cmd, or ox_proxy.js — those are
+  static files that ship with the repo and never change. All this script
+  does is: (1) resolve and store your OpenRouter API key as a user
+  environment variable, (2) write the chosen model to ox-model.txt, which
+  ox.ps1 reads fresh on every launch, and (3) add this folder to your user
+  PATH.
 
-  See README.md in this same folder for WHY each step below exists — three
-  separate, non-obvious bugs had to be found and worked around to make this
-  reliable. Re-running this script is safe (it overwrites its own files and
-  won't duplicate the PATH entry).
+  Because the model lives in ox-model.txt instead of being baked into a
+  generated ox.ps1, switching models is just: .\setup.ps1 -Model "id"
+  — no files get overwritten, and nothing you customized in ox.ps1 or
+  ox_proxy.js is ever touched.
+
+  Run this from inside the cloned repo folder. Safe to re-run any time:
+  running it with no arguments at all keeps your existing key and model
+  exactly as they were.
 
 .PARAMETER ApiKey
-  Your OpenRouter API key (starts with sk-or-v1-...). Required.
+  Your OpenRouter API key. Optional — if omitted, you'll be prompted; just
+  press Enter at that prompt to fall back to the OPENROUTER_API_KEY
+  environment variable if you've already set one yourself. If neither is
+  available, setup stops with an error instead of continuing silently.
 
 .PARAMETER Model
-  The OpenRouter model ID to launch Claude Code against. Defaults to the
-  model this was built for: stealth/ox-alpha. Any OpenRouter model ID works.
+  The OpenRouter model ID to use, e.g. "z-ai/glm-5.2". Optional — if
+  omitted, keeps whatever model is already in ox-model.txt. On a
+  first-ever run with no ox-model.txt yet, defaults to stealth/ox-alpha.
 
 .EXAMPLE
-  .\setup.ps1 -ApiKey "sk-or-v1-...."
+  .\setup.ps1
+  # First run: prompts for a key (or reuses OPENROUTER_API_KEY), defaults
+  # model to stealth/ox-alpha. Later runs: keeps whatever was set before.
+
+.EXAMPLE
+  .\setup.ps1 -Model "z-ai/glm-5.2"
+  # Switches the configured model. Key is untouched if already set.
 #>
 param(
-    [Parameter(Mandatory = $true)]
     [string]$ApiKey,
-
-    [string]$Model = 'stealth/ox-alpha'
+    [string]$Model
 )
 
 $ErrorActionPreference = 'Stop'
+$repoDir = $PSScriptRoot
 
-# --- Prerequisite check -----------------------------------------------------
+# --- Prerequisite check: required tools --------------------------------------
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {
     Write-Error "Node.js is required (the launcher runs a small local proxy) but wasn't found on PATH. Install Node.js and re-run this script."
@@ -42,143 +58,64 @@ if (-not $claudeCmd) {
     Write-Error "Claude Code CLI ('claude') wasn't found on PATH. Install it and re-run this script."
 }
 
-# --- Step 1: store the key persistently -------------------------------------
-$trimmedKey = $ApiKey.Trim()
-[Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', $trimmedKey, 'User')
-Write-Output "[1/4] Stored OPENROUTER_API_KEY as a user environment variable."
-
-# --- Step 2: create the launcher folder -------------------------------------
-$oxDir = "$HOME\ox"
-if (-not (Test-Path $oxDir)) {
-    New-Item -ItemType Directory -Path $oxDir | Out-Null
+# --- Prerequisite check: required repo files ---------------------------------
+$requiredFiles = @('ox.ps1', 'ox.cmd', 'ox_proxy.js')
+$missing = $requiredFiles | Where-Object { -not (Test-Path (Join-Path $repoDir $_)) }
+if ($missing) {
+    Write-Error "This clone is missing required file(s): $($missing -join ', '). Re-clone or 'git pull' the repo and try again."
 }
+Write-Output "[1/4] Found ox.ps1, ox.cmd, ox_proxy.js in $repoDir — nothing to regenerate."
 
-# The forwarding proxy. Exists solely to delete one leaking header — see
-# README.md "Bug 3". Deliberately logs nothing.
-$proxyJs = @'
-// Loopback-only forwarding proxy for OpenRouter.
-// Claude Code sometimes attaches a stale Claude subscription credential to the
-// x-api-key header even when ANTHROPIC_AUTH_TOKEN is set, which OpenRouter's
-// gateway misroutes. This strips that one header and forwards everything else
-// unchanged. No request/response content is logged anywhere.
-const http = require('http');
-const https = require('https');
-
-const server = http.createServer((req, res) => {
-  const chunks = [];
-  req.on('data', (c) => chunks.push(c));
-  req.on('end', () => {
-    const body = Buffer.concat(chunks);
-    const outHeaders = { ...req.headers };
-    delete outHeaders.host;
-    delete outHeaders['x-api-key'];
-    outHeaders.host = 'openrouter.ai';
-
-    const proxyReq = https.request(
-      { hostname: 'openrouter.ai', path: '/api' + req.url, method: req.method, headers: outHeaders },
-      (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res);
-      }
-    );
-    proxyReq.on('error', () => {
-      res.writeHead(502);
-      res.end();
-    });
-    proxyReq.end(body);
-  });
-});
-
-server.listen(0, '127.0.0.1', () => {
-  console.log('PORT:' + server.address().port);
-});
-'@
-Set-Content -Path (Join-Path $oxDir 'ox_proxy.js') -Value $proxyJs -Encoding ascii
-
-# The launcher itself.
-$oxPs1 = @"
-`$ErrorActionPreference = 'Stop'
-
-`$apiKey = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY', 'User')
-if (-not `$apiKey) {
-    `$apiKey = `$env:OPENROUTER_API_KEY
-}
-if (-not `$apiKey) {
-    Write-Error "OPENROUTER_API_KEY is not set. Set it and try again."
-    exit 1
-}
-`$apiKey = `$apiKey.Trim()
-
-`$scriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
-`$proxyScript = Join-Path `$scriptDir 'ox_proxy.js'
-`$proxyOutFile = [System.IO.Path]::GetTempFileName()
-
-`$proxyProcess = `$null
-try {
-    `$proxyProcess = Start-Process -FilePath 'node' -ArgumentList "```"`$proxyScript```"" ``
-        -RedirectStandardOutput `$proxyOutFile -NoNewWindow -PassThru
-
-    `$port = `$null
-    for (`$i = 0; `$i -lt 50; `$i++) {
-        Start-Sleep -Milliseconds 100
-        `$line = Get-Content `$proxyOutFile -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (`$line -match '^PORT:(\d+)`$') {
-            `$port = `$Matches[1]
-            break
+# --- Resolve API key ----------------------------------------------------------
+if (-not $ApiKey) {
+    $typed = Read-Host "Enter your OpenRouter API key (or press Enter to use OPENROUTER_API_KEY from your environment)"
+    if ($typed) {
+        $ApiKey = $typed
+    } else {
+        $ApiKey = [Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY', 'User')
+        if (-not $ApiKey) { $ApiKey = $env:OPENROUTER_API_KEY }
+        if (-not $ApiKey) {
+            Write-Error "No key entered, and OPENROUTER_API_KEY isn't set in your environment. Either enter a key when prompted, or set the environment variable yourself first and re-run."
         }
     }
-    if (-not `$port) {
-        Write-Error "Local proxy failed to start; falling back to direct connection."
-        `$env:ANTHROPIC_BASE_URL = 'https://openrouter.ai/api'
+}
+$trimmedKey = $ApiKey.Trim()
+if (-not $trimmedKey) {
+    Write-Error "API key resolved to empty after trimming."
+}
+[Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', $trimmedKey, 'User')
+Write-Output "[2/4] Stored OPENROUTER_API_KEY as a user environment variable."
+
+# --- Resolve model -------------------------------------------------------------
+$modelFile = Join-Path $repoDir 'ox-model.txt'
+if (-not $Model) {
+    if (Test-Path $modelFile) {
+        $Model = (Get-Content $modelFile -Raw).Trim()
+        Write-Output "No -Model given; keeping previously configured model: $Model"
     } else {
-        `$env:ANTHROPIC_BASE_URL = "http://127.0.0.1:`$port"
+        $Model = 'stealth/ox-alpha'
+        Write-Output "No -Model given and no previous config found; defaulting to $Model"
     }
-
-    `$env:ANTHROPIC_AUTH_TOKEN = `$apiKey
-    `$env:ANTHROPIC_API_KEY = ''
-    `$env:ANTHROPIC_MODEL = '$Model'
-    `$env:ANTHROPIC_CUSTOM_MODEL_OPTION = '$Model'
-    `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = '$Model'
-    `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = '$Model'
-    `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = '$Model'
-    `$env:ANTHROPIC_SMALL_FAST_MODEL = '$Model'
-    `$env:CLAUDE_CODE_SUBAGENT_MODEL = '$Model'
-
-    claude @args
-    exit `$LASTEXITCODE
-} finally {
-    if (`$proxyProcess -and -not `$proxyProcess.HasExited) {
-        Stop-Process -Id `$proxyProcess.Id -Force -ErrorAction SilentlyContinue
-    }
-    Remove-Item `$proxyOutFile -ErrorAction SilentlyContinue
 }
-"@
-Set-Content -Path (Join-Path $oxDir 'ox.ps1') -Value $oxPs1 -Encoding ascii
+Set-Content -Path $modelFile -Value $Model -Encoding ascii -NoNewline
+Write-Output "[3/4] Model set to $Model (stored in ox-model.txt)"
 
-$oxCmd = @'
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0ox.ps1" %*
-'@
-Set-Content -Path (Join-Path $oxDir 'ox.cmd') -Value $oxCmd -Encoding ascii
-
-Write-Output "[2/4] Wrote launcher files to $oxDir"
-
-# --- Step 3: add the folder to user PATH ------------------------------------
+# --- Add repo folder to PATH ----------------------------------------------------
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ($userPath -notlike "*$oxDir*") {
-    $newPath = if ([string]::IsNullOrEmpty($userPath)) { $oxDir } else { "$userPath;$oxDir" }
+if ($userPath -notlike "*$repoDir*") {
+    $newPath = if ([string]::IsNullOrEmpty($userPath)) { $repoDir } else { "$userPath;$repoDir" }
     [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-    Write-Output "[3/4] Added $oxDir to user PATH."
+    Write-Output "[4/4] Added $repoDir to user PATH."
 } else {
-    Write-Output "[3/4] $oxDir already on user PATH."
+    Write-Output "[4/4] $repoDir already on user PATH."
 }
 
-# --- Step 4: verify the key ---------------------------------------------------
+# --- Verify the key -------------------------------------------------------------
 try {
     $resp = Invoke-RestMethod -Uri 'https://openrouter.ai/api/v1/auth/key' -Headers @{ Authorization = "Bearer $trimmedKey" } -Method Get
-    Write-Output "[4/4] Key verified against OpenRouter (label: $($resp.data.label))."
+    Write-Output "Key verified against OpenRouter (label: $($resp.data.label))."
 } catch {
-    Write-Warning "[4/4] Could not verify the key against OpenRouter: $($_.Exception.Message)"
+    Write-Warning "Could not verify the key against OpenRouter: $($_.Exception.Message)"
 }
 
 Write-Output ""
