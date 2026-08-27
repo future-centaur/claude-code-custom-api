@@ -37,13 +37,13 @@ try {
 
     $env:ANTHROPIC_AUTH_TOKEN = $apiKey
     $env:ANTHROPIC_API_KEY = ''
-    $env:ANTHROPIC_MODEL = 'stealth/ox-alpha'
-    $env:ANTHROPIC_CUSTOM_MODEL_OPTION = 'stealth/ox-alpha'
-    $env:ANTHROPIC_DEFAULT_OPUS_MODEL = 'stealth/ox-alpha'
-    $env:ANTHROPIC_DEFAULT_SONNET_MODEL = 'stealth/ox-alpha'
-    $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = 'stealth/ox-alpha'
-    $env:ANTHROPIC_SMALL_FAST_MODEL = 'stealth/ox-alpha'
-    $env:CLAUDE_CODE_SUBAGENT_MODEL = 'stealth/ox-alpha'
+    $env:ANTHROPIC_MODEL = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_CUSTOM_MODEL_OPTION = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_DEFAULT_OPUS_MODEL = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_DEFAULT_SONNET_MODEL = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = 'z-ai/glm-5.2:free'
+    $env:ANTHROPIC_SMALL_FAST_MODEL = 'z-ai/glm-5.2:free'
+    $env:CLAUDE_CODE_SUBAGENT_MODEL = 'z-ai/glm-5.2:free'
 
     claude @args
     exit $LASTEXITCODE
