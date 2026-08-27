@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  One-time setup for `ox` — configures your OpenRouter API key and model,
+  One-time setup for `ox`  -  configures your OpenRouter API key and model,
   then adds this folder to your PATH so `ox` launches Claude Code through it.
 
 .DESCRIPTION
-  This script does NOT generate ox.ps1, ox.cmd, or ox_proxy.js — those are
+  This script does NOT generate ox.ps1, ox.cmd, or ox_proxy.js  -  those are
   static files that ship with the repo and never change. All this script
   does is: (1) resolve and store your OpenRouter API key as a user
   environment variable, (2) write the chosen model to ox-model.txt, which
@@ -13,7 +13,7 @@
 
   Because the model lives in ox-model.txt instead of being baked into a
   generated ox.ps1, switching models is just: .\setup.ps1 -Model "id"
-  — no files get overwritten, and nothing you customized in ox.ps1 or
+   -  no files get overwritten, and nothing you customized in ox.ps1 or
   ox_proxy.js is ever touched.
 
   Run this from inside the cloned repo folder. Safe to re-run any time:
@@ -21,13 +21,13 @@
   exactly as they were.
 
 .PARAMETER ApiKey
-  Your OpenRouter API key. Optional — if omitted, you'll be prompted; just
+  Your OpenRouter API key. Optional  -  if omitted, you'll be prompted; just
   press Enter at that prompt to fall back to the OPENROUTER_API_KEY
   environment variable if you've already set one yourself. If neither is
   available, setup stops with an error instead of continuing silently.
 
 .PARAMETER Model
-  The OpenRouter model ID to use, e.g. "z-ai/glm-5.2". Optional — if
+  The OpenRouter model ID to use, e.g. "z-ai/glm-5.2". Optional  -  if
   omitted, keeps whatever model is already in ox-model.txt. On a
   first-ever run with no ox-model.txt yet, defaults to stealth/ox-alpha.
 
@@ -64,7 +64,7 @@ $missing = $requiredFiles | Where-Object { -not (Test-Path (Join-Path $repoDir $
 if ($missing) {
     Write-Error "This clone is missing required file(s): $($missing -join ', '). Re-clone or 'git pull' the repo and try again."
 }
-Write-Output "[1/4] Found ox.ps1, ox.cmd, ox_proxy.js in $repoDir — nothing to regenerate."
+Write-Output "[1/4] Found ox.ps1, ox.cmd, ox_proxy.js in $repoDir  -  nothing to regenerate."
 
 # --- Resolve API key ----------------------------------------------------------
 if (-not $ApiKey) {
