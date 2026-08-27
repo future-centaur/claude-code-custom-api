@@ -218,3 +218,77 @@ issue. Fix: find the model's new/real name and re-run `setup.ps1 -Model
 - `/logout` is never run, so your normal Claude subscription login (the
   thing Bug 3 works around) stays intact for normal `claude` use.
 - The proxy never persists request or response content to disk.
+
+## What changed (read this if upgrading from an earlier clone)
+
+Earlier versions of `setup.ps1` generated `ox.ps1`, `ox.cmd`, and
+`ox_proxy.js` fresh into `$HOME\ox` every time you ran it, baking your
+chosen model directly into the generated file as a literal string. That
+meant switching models required re-running the whole generator, and any run
+without an explicit `-Model` flag silently reset you back to the default
+(`stealth/ox-alpha`), discarding whatever you'd configured before.
+
+As of this version:
+- `ox.ps1`, `ox.cmd`, and `ox_proxy.js` are static files that ship with the
+  repo. `setup.ps1` never rewrites them.
+- Your model choice lives in `ox-model.txt`, a single-line file next to
+  `ox.ps1` that gets read fresh on every launch. Changing models is just:
+
+  ```powershell
+  .\setup.ps1 -Model "z-ai/glm-5.2"
+  ```
+  This only touches `ox-model.txt` — nothing else is regenerated.
+- `$HOME\ox` is no longer used. The repo folder itself gets added to your
+  PATH.
+
+**If you set this up before this change:** delete `$HOME\ox` — it's dead
+weight now and could shadow the new setup if left on PATH.
+
+## Setup
+
+Run from inside the cloned repo folder:
+
+```powershell
+.\setup.ps1
+```
+
+This will:
+1. Check that Node.js and the `claude` CLI are installed.
+2. Verify `ox.ps1`, `ox.cmd`, and `ox_proxy.js` are present (i.e. your clone
+   is complete).
+3. Prompt for your OpenRouter API key — **press Enter with nothing typed**
+   to reuse `OPENROUTER_API_KEY` from your environment if you've already
+   set one yourself. If neither is available, setup stops with an error.
+4. Set the model. Defaults to `stealth/ox-alpha` on a first-ever run;
+   afterward, re-running with no `-Model` flag keeps whatever was set last.
+5. Add the repo folder to your user PATH.
+
+Open a **new** terminal afterward (PATH changes don't apply to the terminal
+you ran setup in), then just run:
+
+```powershell
+ox
+```
+
+### Switching models
+
+```powershell
+.\setup.ps1 -Model "deepseek/deepseek-v4-flash"
+```
+
+Only `ox-model.txt` changes. Your API key, `ox.ps1`, and `ox_proxy.js` are
+untouched.
+
+### If you move or rename the repo folder
+
+PATH stores the literal folder path at the time you ran `setup.ps1`. If you
+rename or move the folder afterward, `ox` will stop resolving. Just
+re-run `.\setup.ps1` from the new location — no flags needed if your key and
+model are already set, it'll just re-add the correct path.
+
+## `.gitignore`
+
+If you're forking or customizing this repo, add `ox-model.txt` to
+`.gitignore` — it's a per-user preference file, and each fresh clone should
+fall back to the built-in default rather than inheriting your last-used
+model.
